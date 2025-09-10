@@ -88,9 +88,23 @@ try {
 
 function getOrders($pdo) {
     $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
+    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 12;
     $status = isset($_GET['status']) ? $_GET['status'] : null;
     $offset = ($page - 1) * $limit;
+
+    $countSql = "SELECT COUNT(*) FROM orders WHERE 1=1";
+    $countParams = [];
+
+    if ($status) {
+        $countSql .= " AND status = ?";
+        $countParams[] = $status;
+    }
+
+    $countStmt = $pdo->prepare($countSql);
+    $countStmt->execute($countParams);
+    $total = (int)$countStmt->fetchColumn();
+
+    $totalPages = ceil($total / $limit);
 
     $sql = "SELECT * FROM orders WHERE 1=1";
     $params = [];
@@ -100,7 +114,7 @@ function getOrders($pdo) {
         $params[] = $status;
     }
 
-    $sql .= " LIMIT ? OFFSET ?";
+    $sql .= " ORDER BY created_at DESC LIMIT ? OFFSET ?";
     $params[] = $limit;
     $params[] = $offset;
 
@@ -108,9 +122,15 @@ function getOrders($pdo) {
     $stmt->execute($params);
     $orders = $stmt->fetchAll();
 
-    echo json_encode(['status' => 'success', 'items' => $orders]);
+    echo json_encode([
+        'status' => 'success',
+        'items' => $orders,
+        'page' => $page,
+        'limit' => $limit,
+        'total' => $total,
+        'totalPages' => $totalPages
+    ]);
 }
-
 function getOrderById($pdo, $id) {
     $stmt = $pdo->prepare("SELECT * FROM orders WHERE id = ?");
     $stmt->execute([$id]);

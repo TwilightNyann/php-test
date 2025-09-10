@@ -1,195 +1,239 @@
-const API_URL = 'http://localhost/api/orders';
+const API_URL = "http://localhost/api/orders";
+let currentPage = 1;
+let currentStatus = "";
 
-const ordersOutput = document.getElementById('ordersOutput');
-const formMessage = document.getElementById('formMessage');
-const refreshBtn = document.getElementById('refreshBtn');
-const statusFilter = document.getElementById('statusFilter');
-const orderForm = document.getElementById('orderForm');
-const orderListTab = document.getElementById('order-list-tab');
+document.addEventListener("DOMContentLoaded", () => {
+    loadOrders();
+
+    document.getElementById("orderForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        await createOrder();
+    });
+
+
+    document.getElementById("statusFilter").addEventListener("change", (e) => {
+        currentStatus = e.target.value;
+        currentPage = 1;
+        loadOrders();
+    });
+
+
+    document.getElementById("refreshBtn").addEventListener("click", () => {
+        loadOrders();
+    });
+
+    document.getElementById("order-list-tab").addEventListener("shown.bs.tab", () => {
+        loadOrders();
+    });
+});
 
 async function loadOrders() {
+    const url = new URL(API_URL);
+    url.searchParams.append("page", currentPage);
+    url.searchParams.append("limit", 12);
+    if (currentStatus) url.searchParams.append("status", currentStatus);
+
     try {
-        const selectedStatus = statusFilter.value;
-        const url = selectedStatus ? `${API_URL}?status=${selectedStatus}` : API_URL;
-
         const res = await fetch(url);
-        if (!res.ok) {
-            const errorData = await res.json().catch(() => ({ message: 'Невідома помилка' }));
-            throw new Error(`HTTP статус ${res.status}: ${errorData.message}`);
-        }
-
         const data = await res.json();
-        if (data.status !== 'success') throw new Error(data.message);
 
-        if (data.items.length === 0) {
-            ordersOutput.innerHTML = '<p>Замовлень немає</p>';
-            return;
+        if (data.status === "success") {
+            renderOrders(data.items);
+            renderPagination(data.page, data.totalPages);
+        } else {
+            document.getElementById("ordersOutput").innerHTML =
+                `<div class="alert alert-danger">Помилка: ${data.message}</div>`;
         }
-
-        const rows = data.items.map(order => `
-            <tr id="order-${order.id}" class="${getStatusClass(order.status)}">
-                <td>${order.id}</td>
-                <td>${order.customer_name}</td>
-                <td>${order.customer_phone}</td>
-                <td>
-                    <select class="form-select order-status-select" data-id="${order.id}">
-                        <option value="new" ${order.status === 'new' ? 'selected' : ''}>Нове</option>
-                        <option value="in_progress" ${order.status === 'in_progress' ? 'selected' : ''}>В роботі</option>
-                        <option value="done" ${order.status === 'done' ? 'selected' : ''}>Виконане</option>
-                        <option value="canceled" ${order.status === 'canceled' ? 'selected' : ''}>Скасоване</option>
-                    </select>
-                </td>
-                <td>${parseFloat(order.total_price ?? 0).toFixed(2)}</td>
-                <td>${order.created_at}</td>
-                <td>
-                    <button class="btn btn-danger btn-sm delete-btn" data-id="${order.id}">Видалити</button>
-                </td>
-            </tr>
-        `).join('');
-
-        ordersOutput.innerHTML = `
-            <table class="table table-bordered">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Ім'я</th>
-                        <th>Телефон</th>
-                        <th>Статус</th>
-                        <th>Сума</th>
-                        <th>Дата створення</th>
-                        <th>Дії</th>
-                    </tr>
-                </thead>
-                <tbody>${rows}</tbody>
-            </table>
-        `;
-        addEventListenersToTable();
     } catch (err) {
-        ordersOutput.innerHTML = `<div class="alert alert-danger">Помилка: ${err.message}</div>`;
+        document.getElementById("ordersOutput").innerHTML =
+            `<div class="alert alert-danger">Помилка з'єднання з сервером</div>`;
     }
 }
 
+
+function renderOrders(orders) {
+    const output = document.getElementById("ordersOutput");
+
+    if (!orders || orders.length === 0) {
+        output.innerHTML = "<p>Немає замовлень</p>";
+        return;
+    }
+
+    const rows = orders.map(order => `
+        <tr id="order-${order.id}" class="${getStatusClass(order.status)}">
+            <td>${order.id}</td>
+            <td>${order.customer_name}</td>
+            <td>${order.customer_phone}</td>
+            <td>
+                <select class="form-select order-status-select" data-id="${order.id}">
+                    <option value="new" ${order.status === 'new' ? 'selected' : ''}>Нове</option>
+                    <option value="in_progress" ${order.status === 'in_progress' ? 'selected' : ''}>В роботі</option>
+                    <option value="done" ${order.status === 'done' ? 'selected' : ''}>Виконане</option>
+                    <option value="canceled" ${order.status === 'canceled' ? 'selected' : ''}>Скасоване</option>
+                </select>
+            </td>
+            <td>${parseFloat(order.total_price ?? 0).toFixed(2)}</td>
+            <td>${order.created_at}</td>
+            <td>
+                <button class="btn btn-danger btn-sm delete-btn" data-id="${order.id}">Видалити</button>
+            </td>
+        </tr>
+    `).join("");
+
+    output.innerHTML = `
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Ім'я</th>
+                    <th>Телефон</th>
+                    <th>Статус</th>
+                    <th>Сума</th>
+                    <th>Дата створення</th>
+                    <th>Дії</th>
+                </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+        </table>
+    `;
+
+    addEventListenersToTable();
+}
+
+function renderPagination(page, totalPages) {
+    const pagination = document.querySelector(".pagination");
+    pagination.innerHTML = "";
+
+    const prev = document.createElement("li");
+    prev.className = "page-item" + (page <= 1 ? " disabled" : "");
+    prev.innerHTML = `<a class="page-link" href="#">&laquo;</a>`;
+    prev.onclick = (e) => {
+        e.preventDefault();
+        if (page > 1) {
+            currentPage = page - 1;
+            loadOrders();
+        }
+    };
+    pagination.appendChild(prev);
+
+    for (let i = 1; i <= totalPages; i++) {
+        const li = document.createElement("li");
+        li.className = "page-item" + (i === page ? " active" : "");
+        li.innerHTML = `<a class="page-link" href="#">${i}</a>`;
+        li.onclick = (e) => {
+            e.preventDefault();
+            currentPage = i;
+            loadOrders();
+        };
+        pagination.appendChild(li);
+    }
+
+    const next = document.createElement("li");
+    next.className = "page-item" + (page >= totalPages ? " disabled" : "");
+    next.innerHTML = `<a class="page-link" href="#">&raquo;</a>`;
+    next.onclick = (e) => {
+        e.preventDefault();
+        if (page < totalPages) {
+            currentPage = page + 1;
+            loadOrders();
+        }
+    };
+    pagination.appendChild(next);
+}
+
 function addEventListenersToTable() {
-    document.querySelectorAll('.order-status-select').forEach(select => {
-        select.addEventListener('change', async (e) => {
+    document.querySelectorAll(".order-status-select").forEach(select => {
+        select.addEventListener("change", async (e) => {
             const orderId = e.target.dataset.id;
             const newStatus = e.target.value;
             await updateOrderStatus(orderId, newStatus);
         });
     });
 
-    document.querySelectorAll('.delete-btn').forEach(button => {
-        button.addEventListener('click', async (e) => {
+    document.querySelectorAll(".delete-btn").forEach(button => {
+        button.addEventListener("click", async (e) => {
             const orderId = e.target.dataset.id;
-                await deleteOrder(orderId);
+            await deleteOrder(orderId);
         });
     });
 }
 
-
 async function updateOrderStatus(id, status) {
     try {
         const res = await fetch(`${API_URL}/${id}`, {
-            method: 'PUT',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({status: status})
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status })
         });
 
-        if (!res.ok) {
-            const errorData = await res.json().catch(() => ({ message: 'Невідома помилка' }));
-            throw new Error(`HTTP статус ${res.status}: ${errorData.message}`);
-        }
-
         const result = await res.json();
-        if (result.status === 'success') {
-            const orderRow = document.getElementById(`order-${id}`);
-            if (orderRow) {
-
-                orderRow.className = '';
-                orderRow.classList.add(getStatusClass(status));
+        if (result.status === "success") {
+            const row = document.getElementById(`order-${id}`);
+            if (row) {
+                row.className = getStatusClass(status);
             }
         } else {
-            throw new Error(result.message);
+            alert(`Помилка: ${result.message}`);
         }
-    } catch (error) {
-        alert(`Помилка оновлення: ${error.message}`);
+    } catch (err) {
+        alert("Помилка оновлення замовлення");
     }
 }
+
 
 async function deleteOrder(id) {
     try {
-        const res = await fetch(`${API_URL}/${id}`, {
-            method: 'DELETE',
-        });
-
-        if (!res.ok) {
-            const errorData = await res.json().catch(() => ({ message: 'Невідома помилка' }));
-            throw new Error(`HTTP статус ${res.status}: ${errorData.message}`);
-        }
-
+        const res = await fetch(`${API_URL}/${id}`, { method: "DELETE" });
         const result = await res.json();
-        if (result.status === 'success') {
-            const orderRow = document.getElementById(`order-${id}`);
-            if (orderRow) {
-                orderRow.remove();
-            }
+
+        if (result.status === "success") {
+            const row = document.getElementById(`order-${id}`);
+            if (row) row.remove();
         } else {
-            throw new Error(result.message);
+            alert(`Помилка: ${result.message}`);
         }
-    } catch (error) {
-        alert(`Помилка видалення: ${error.message}`);
+    } catch (err) {
+        alert("Помилка видалення замовлення");
     }
 }
 
-orderForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const name = document.getElementById('customerName').value.trim();
-    const phone = document.getElementById('customerPhone').value.trim();
-    const totalPrice = parseFloat(document.getElementById('totalPrice').value);
+async function createOrder() {
+    const name = document.getElementById("customerName").value.trim();
+    const phone = document.getElementById("customerPhone").value.trim();
+    const price = parseFloat(document.getElementById("totalPrice").value);
+
+    const formMessage = document.getElementById("formMessage");
 
     try {
         const res = await fetch(API_URL, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({customer_name: name, customer_phone: phone, total_price: totalPrice})
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                customer_name: name,
+                customer_phone: phone,
+                total_price: price
+            })
         });
 
-        if (!res.ok) {
-            const errorData = await res.json().catch(() => ({ message: 'Невідома помилка' }));
-            throw new Error(`HTTP статус ${res.status}: ${errorData.message}`);
-        }
-
-        const result = await res.json();
-        if (result.status === 'success') {
-            formMessage.innerHTML = '<div class="alert alert-success">Замовлення успішно створено!</div>';
-            e.target.reset();
+        const data = await res.json();
+        if (data.status === "success") {
+            formMessage.innerHTML = `<div class="alert alert-success">Замовлення створено</div>`;
+            document.getElementById("orderForm").reset();
             loadOrders();
         } else {
-            throw new Error(result.message);
+            formMessage.innerHTML = `<div class="alert alert-danger">${data.message}</div>`;
         }
-    } catch (error) {
-        formMessage.innerHTML = `<div class="alert alert-danger">Помилка: ${error.message}</div>`;
-    }
-});
-
-function getStatusClass(status) {
-    switch (status) {
-        case 'new': return 'table-primary';
-        case 'in_progress': return 'table-warning';
-        case 'done': return 'table-success';
-        case 'canceled': return 'table-danger';
-        default: return '';
+    } catch (err) {
+        formMessage.innerHTML = `<div class="alert alert-danger">Помилка з'єднання</div>`;
     }
 }
 
-refreshBtn.addEventListener('click', async (e) => {
-
-    e.preventDefault();
-    try {
-        await loadOrders();
-    } catch (error) {
-        console.error("Помилка при оновленні: ", error);
+function getStatusClass(status) {
+    switch (status) {
+        case "new": return "table-primary";
+        case "in_progress": return "table-warning";
+        case "done": return "table-success";
+        case "canceled": return "table-danger";
+        default: return "";
     }
-});
-statusFilter.addEventListener('change', loadOrders);
-orderListTab.addEventListener('shown.bs.tab', loadOrders);
+}
