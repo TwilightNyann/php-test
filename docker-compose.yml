@@ -9,6 +9,8 @@ services:
       - "80:80"
     volumes:
       - ./server_block.conf:/opt/bitnami/nginx/conf/server_blocks/php-test.conf
+      - ./frontend:/app/frontend
+      - ./src/api:/app/api
 
   phpfpm:
     image: bitnami/php-fpm:latest
@@ -18,23 +20,14 @@ services:
       - ./src:/app
     depends_on:
       - mysql
-    environment:
-      - PHP_ENABLE_OPCACHE=no
-      - DB_HOST=mysql
-      - DB_NAME=orders_db
-      - DB_USER=root
-      - DB_PASS=root
+
   mysql:
     image: mysql:8.0
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: orders_db
     volumes:
-      - mysql_data:/var/lib/mysql
       - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
-    ports:
-      - "3306:3306"
-    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     networks:
       - app-tier
 
@@ -50,7 +43,6 @@ services:
       - mysql
     networks:
       - app-tier
-
 
 volumes:
   mysql_data:
