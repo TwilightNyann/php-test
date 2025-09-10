@@ -5,7 +5,6 @@ header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
 
-
 if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
     http_response_code(200);
     exit();
@@ -33,10 +32,15 @@ try {
     exit;
 }
 
+
 $method = $_SERVER['REQUEST_METHOD'];
-$requestUri = explode('/', trim($_SERVER['REQUEST_URI'], '/'));
-$endpoint = isset($requestUri[1]) ? $requestUri[1] : '';
-$id = isset($requestUri[2]) ? $requestUri[2] : null;
+
+
+$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+$requestUri = explode('/', trim($uri, '/'));
+
+$endpoint = $requestUri[1] ?? '';
+$id = $requestUri[2] ?? null;
 
 try {
     switch ($endpoint) {
@@ -82,23 +86,23 @@ try {
     echo json_encode(['status' => 'error', 'message' => 'Server error: ' . $e->getMessage()]);
 }
 
-
 function getOrders($pdo) {
-    $page = isset($_GET['page']) ? $_GET['page'] : 1;
-    $limit = isset($_GET['limit']) ? $_GET['limit'] : 100;
+    $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
     $status = isset($_GET['status']) ? $_GET['status'] : null;
     $offset = ($page - 1) * $limit;
 
     $sql = "SELECT * FROM orders WHERE 1=1";
     $params = [];
+
     if ($status) {
         $sql .= " AND status = ?";
         $params[] = $status;
     }
 
     $sql .= " LIMIT ? OFFSET ?";
-    $params[] = (int)$limit;
-    $params[] = (int)$offset;
+    $params[] = $limit;
+    $params[] = $offset;
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
